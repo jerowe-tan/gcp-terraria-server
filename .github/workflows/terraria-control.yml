@@ -1,5 +1,6 @@
 name: Terraria Server Control
 
+# Manual operational control only. No push or pull_request trigger by design.
 on:
   workflow_dispatch:
     inputs:
@@ -85,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "::warning::Current stop action does not yet perform Terraria save/backup verification."
-          echo "::warning::Add the safe-stop backup flow before relying on this for important worlds."
+          echo "::warning::The VM-side backup timer keeps rolling world backups every 10 minutes once installed."
+          echo "::warning::This stop action does not yet force a final world backup immediately before VM shutdown."
 
           gcloud compute instances stop "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"

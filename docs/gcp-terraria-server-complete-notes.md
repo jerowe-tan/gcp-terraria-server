@@ -1004,25 +1004,28 @@ save world
     ↓
 world.wld
     ↓
-Cloud Storage / backup
+GitHub Release asset
 ```
 
-Suggested layout:
+Current backup decision:
 
 ```text
-gs://YOUR_TERRARIA_BUCKET/
+interval:
+10 minutes
 
-worlds/
-├── current/
-│   └── OurWorld.wld
-│
-└── backups/
-    ├── 2026-09-21-180000-OurWorld.wld
-    ├── 2026-09-20-220000-OurWorld.wld
-    └── ...
+maximum retained backups:
+10
+
+storage:
+GitHub Release assets
+
+release tag:
+terraria-world-backups
 ```
 
-Cloud Storage backup automation is still a future step.
+The `.wld` files are not committed into normal Git history. The VM uploads timestamped Release assets and deletes the oldest asset whenever more than 10 automatic backups exist.
+
+If the world hash is unchanged since the last successful upload, that interval is skipped.
 
 ---
 
@@ -1061,19 +1064,27 @@ do not blindly continue as though everything is safe.
 
 Because the server is Spot, relying only on a manual STOP backup is risky.
 
-Recommended future behavior:
+Current planned behavior:
 
 ```text
-Every 5-10 minutes
+Every 10 minutes
       ↓
-Terraria save/checkpoint
+Terraria save/checkpoint when a save hook is available
       ↓
-copy/upload world backup
+capture a stable world.wld snapshot
+      ↓
+skip if SHA-256 is unchanged
+      ↓
+upload to the GitHub backup Release
+      ↓
+retain newest 10 backups
+      ↓
+delete oldest backup when needed
 ```
 
-Then a sudden Spot preemption should lose only a small amount of progress at worst.
+Then a sudden Spot preemption should normally lose no more than roughly one backup interval of uploaded progress.
 
-The exact backup frequency can be tuned later.
+The timer is VM-side systemd automation, so it runs only while the VM is running.
 
 ---
 
@@ -1386,45 +1397,25 @@ What IAM roles does that service account have?
 
 ---
 
-# 42. PR Merge / Update Workflow
+# 42. Manual GitHub Control Workflow
 
-A separate update workflow can run after code is merged.
-
-Simple:
-
-```yaml
-on:
-  push:
-    branches:
-      - main
-```
-
-Or explicit PR merge:
-
-```yaml
-on:
-  pull_request:
-    types:
-      - closed
-    branches:
-      - main
-
-jobs:
-  update:
-    if: github.event.pull_request.merged == true
-```
-
-Recommended separation:
+Current decision:
 
 ```text
 terraria-control.yml
-→ manual start / stop / status
-
-terraria-update.yml
-→ deployment/update after merge
+→ manual status / start / stop
 ```
 
-This prevents an unrelated commit from automatically turning on the server unnecessarily.
+The server control workflow uses only:
+
+```yaml
+on:
+  workflow_dispatch:
+```
+
+There is no PR-merge or push trigger for starting or stopping the Terraria VM.
+
+Repository changes and server runtime control are intentionally separate concerns.
 
 ---
 
@@ -1553,8 +1544,20 @@ VERIFY
 DUCKDNS_SUBDOMAIN=
 OPTIONAL / TODO
 
-WORLD_BACKUP_BUCKET=
-TODO
+GITHUB_BACKUP_RELEASE_TAG=
+terraria-world-backups
+
+MAX_WORLD_BACKUPS=
+10
+
+BACKUP_INTERVAL=
+10 minutes
+
+TERRARIA_WORLD_PATH=
+VERIFY AFTER TERRARIA INSTALL
+
+GITHUB_BACKUP_TOKEN=
+VM-ONLY SECRET / TODO
 
 TERRARIA_PASSWORD=
 OPTIONAL
@@ -1773,7 +1776,9 @@ Workload Identity Federation
         +
 GitHub Actions start/stop/status
         +
-future world backups
+GitHub Release world backups every 10 minutes
+        +
+maximum 10 retained world backups
         +
 optional DuckDNS
 ```

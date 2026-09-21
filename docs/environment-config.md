@@ -2,7 +2,7 @@
 
 This file is the operational checklist for configuration values used by the Terraria server project.
 
-The current architecture uses Google Cloud for the VM and networking, GitHub Actions for start/stop/status, GitHub OIDC plus Google Workload Identity Federation for authentication, optional DuckDNS, and future Cloud Storage world backups.
+The current architecture uses Google Cloud for the VM and networking, a manual GitHub Actions workflow for start/stop/status, GitHub OIDC plus Google Workload Identity Federation for Google authentication, GitHub Release assets for Terraria world backups, and optional DuckDNS.
 
 Do not commit real secrets to this repository.
 
@@ -26,7 +26,6 @@ GitHub repository
 | `GCP_SERVICE_ACCOUNT` | Yes | `github-terraria-control@tmpsh-recreation-service.iam.gserviceaccount.com` | Service account impersonated through Workload Identity Federation. |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes | Pending creation/verification | Full WIF provider resource name. |
 | `DUCKDNS_SUBDOMAIN` | Optional | TBD | DuckDNS subdomain to update after VM start. |
-| `WORLD_BACKUP_BUCKET` | Future | TBD | Cloud Storage bucket name used for world backups. |
 
 The WIF provider variable must use the full provider resource name:
 
@@ -38,7 +37,7 @@ Do not substitute the GCP Project ID for `PROJECT_NUMBER`.
 
 ## 2. GitHub Actions repository secrets
 
-Configure these in:
+Configure GitHub Actions secrets in:
 
 ```text
 GitHub repository
@@ -53,17 +52,19 @@ GitHub repository
 | `DUCKDNS_TOKEN` | Optional | Authenticates DuckDNS updates. |
 | `TERRARIA_PASSWORD` | Optional / future | Password passed into Terraria server configuration if password protection is enabled. |
 
-Google service-account JSON keys should **not** be stored as GitHub secrets. The intended authentication mechanism is Workload Identity Federation.
+The Terraria world backup token is **not** a GitHub Actions secret in the current design. It is a VM-local secret documented below.
+
+Google service-account JSON keys should **not** be stored as GitHub secrets. The intended Google authentication mechanism is Workload Identity Federation.
 
 ## 3. GitHub workflow permissions
 
-The workflow needs read access to repository contents and write access to GitHub's OIDC identity-token permission. That OIDC permission is what allows the Google authentication action to request a short-lived GitHub identity token.
+The manual control workflow needs read access to repository contents and write access to GitHub's OIDC identity-token permission. That OIDC permission allows the Google authentication action to request a short-lived GitHub identity token.
 
 It does not itself grant Google Cloud permissions. Google must separately trust the repository identity and permit service-account impersonation.
 
-## 4. Google Cloud values
+The workflow is intentionally manual-only. It does not use `push` or `pull_request` as a server start/stop trigger.
 
-These are infrastructure values, not normal process environment variables.
+## 4. Google Cloud values
 
 | Setting | Current / expected value | Where configured |
 | --- | --- | --- |
@@ -83,21 +84,14 @@ These are infrastructure values, not normal process environment variables.
 | Service account | `github-terraria-control@tmpsh-recreation-service.iam.gserviceaccount.com` | IAM |
 | Current service-account role | Compute Instance Admin (v1) | IAM |
 
-The external IPv4 address is intentionally ephemeral and must not be treated as configuration.
-
 ## 5. Workload Identity Federation
 
 Planned values:
 
 ```text
-Pool ID:
-github-actions
-
-Provider ID:
-github
-
-Issuer:
-https://token.actions.githubusercontent.com
+Pool ID: github-actions
+Provider ID: github
+Issuer: https://token.actions.githubusercontent.com
 ```
 
 Recommended attribute mappings:
@@ -116,13 +110,36 @@ assertion.repository == 'jerowe-tan/gcp-terraria-server'
 
 The resulting provider resource name becomes the GitHub variable `GCP_WORKLOAD_IDENTITY_PROVIDER`.
 
-The external GitHub principal also needs permission to impersonate the service account through Workload Identity Federation.
+## 6. VM-local world backup configuration
 
-## 6. Terraform inputs
+The backup system runs on the VM every **10 minutes** using a systemd timer. It uploads changed `.wld` files to a GitHub Release and retains at most **10** automatic backups.
 
-The files under `terraform/server/` are currently reference scaffolding only. They are not the source of truth for the live infrastructure.
+Store configuration at `/etc/terraria-backup.env` with owner `root:root` and mode `0600`.
 
-If Terraform is adopted later, use Terraform variables or a non-committed `terraform.tfvars` for non-secret deployment-specific values.
+| Variable | Required? | Value / example | Purpose |
+| --- | --- | --- | --- |
+| `GITHUB_BACKUP_REPOSITORY` | Yes | `jerowe-tan/gcp-terraria-server` | Repository containing the backup Release. |
+| `GITHUB_BACKUP_RELEASE_TAG` | Yes | `terraria-world-backups` | Dedicated Release tag. |
+| `GITHUB_BACKUP_RELEASE_NAME` | Recommended | `Terraria World Backups` | Human-readable Release name. |
+| `GITHUB_BACKUP_TOKEN` | Yes | VM-only secret | Fine-grained token used to manage Release assets. |
+| `TERRARIA_WORLD_PATH` | Yes | Verify after Terraria install | Full path to the active `.wld` file. |
+| `BACKUP_FILE_PREFIX` | Recommended | `terraria-world` | Prefix for Release asset filenames. |
+| `MAX_WORLD_BACKUPS` | Yes | `10` | Maximum retained automatic backups. |
+| `TERRARIA_SAVE_SETTLE_SECONDS` | Recommended | `2` | Delay after an optional save hook. |
+| `TERRARIA_SAVE_HOOK` | Future / recommended | executable path | Tells Terraria to save before snapshotting. |
+| `TERRARIA_STOP_HOOK` | Future / recommended | executable path | Gracefully stops Terraria before restore. |
+
+The 10-minute interval is configured in `systemd/terraria-world-backup.timer` with `OnUnitActiveSec=10min`.
+
+The GitHub backup token should be a fine-grained token restricted to this repository with `Contents: Read and write`. Do not commit it to Git or Terraform state.
+
+If the repository is public, published Release assets are publicly accessible. Keep the repository private if the world save must remain private.
+
+See `docs/backup-restore.md` for installation and restore procedures.
+
+## 7. Terraform inputs
+
+The files under `terraform/server/` are reference scaffolding only and are not the source of truth for the live infrastructure.
 
 | Terraform variable | Example / status |
 | --- | --- |
@@ -138,41 +155,32 @@ If Terraform is adopted later, use Terraform variables or a non-committed `terra
 | `service_account_email` | Existing GitHub control service account |
 | `github_repository` | `jerowe-tan/gcp-terraria-server` |
 
-Never commit Terraform variable files containing sensitive values, Terraform state, service-account JSON keys, private keys, DuckDNS tokens, or Terraria passwords.
-
-## 7. Future VM/runtime configuration
-
-When Terraria installation automation is added, document each runtime setting here before wiring it into scripts.
-
-| Setting | Storage recommendation | Notes |
-| --- | --- | --- |
-| World file/name | VM config or deployment config | Must match backup scripts. |
-| Max players | VM config | Non-secret. |
-| Terraria server password | GitHub secret or VM secret mechanism | Optional. |
-| Backup bucket | GitHub variable / VM config | Needed for Cloud Storage backup automation. |
-| Backup interval | VM config | Proposed interval is approximately 5–10 minutes. |
-| DuckDNS subdomain | GitHub variable | Optional. |
-| DuckDNS token | GitHub secret | Optional and sensitive. |
+Never commit Terraform state, service-account JSON keys, private keys, GitHub tokens, DuckDNS tokens, or Terraria passwords.
 
 ## 8. Configuration still missing
-
-Before the full automation can be considered complete, verify or create:
 
 - GCP Project Number
 - Workload Identity Pool and Provider
 - WIF service-account impersonation binding
 - `GCP_WORKLOAD_IDENTITY_PROVIDER` GitHub variable
-- actual subnet name
-- actual subnet CIDR
-- firewall rule name and TCP 7777 configuration
-- world backup bucket
-- safe Terraria save/backup/stop mechanism
+- actual subnet name and CIDR
+- verified firewall rule
+- actual Terraria world path
+- VM fine-grained GitHub backup token
+- tested Terraria save hook
+- tested graceful Terraria stop hook
 - optional DuckDNS values
 
 ## 9. Current workflow
 
-The initial workflow lives at `.github/workflows/terraria-control.yml`.
+The control workflow at `.github/workflows/terraria-control.yml` is manually triggered with `workflow_dispatch` and supports:
 
-It supports `status`, `start`, and `stop`.
+```text
+status
+start
+stop
+```
 
-The current `stop` operation stops the VM directly and deliberately prints a warning because world-save and backup verification are not implemented yet. Treat that as an interim control path, not the final safe shutdown design.
+There is intentionally no PR-merge, push, or automatic server-start trigger.
+
+The VM-side backup timer is separate from GitHub Actions and runs every 10 minutes while the VM is running. The current GitHub `stop` action does not yet force a final backup immediately before stopping the VM.

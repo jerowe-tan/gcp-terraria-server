@@ -1,0 +1,18 @@
+[Unit]
+Description=Back up Terraria world to GitHub Release assets
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=terraria
+Group=terraria
+EnvironmentFile=/etc/terraria-backup.env
+Environment=BACKUP_STATE_DIR=/var/lib/terraria-backup
+StateDirectory=terraria-backup
+ExecStart=/usr/local/bin/backup-world-to-github.sh
+
+# Keep backup work lower priority than gameplay.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
