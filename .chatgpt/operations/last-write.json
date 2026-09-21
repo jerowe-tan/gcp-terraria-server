@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "operation_id": "write-2026-09-21T07-47-25-955Z-dbbc73e1",
+  "tool": "repo_write_changes",
+  "repo_id": "terraria-server",
+  "timestamp": "2026-09-21T07:47:25.956Z",
+  "head_sha_before": "5b5531036f631a0434efd6b6abfa0250a049d324",
+  "head_sha_after": "5b5531036f631a0434efd6b6abfa0250a049d324",
+  "touched_paths": [
+    ".github/workflows/terraria-control.yml",
+    "docs/environment-config.md",
+    "terraform/server/variables.tf",
+    "terraform/server/main.tf",
+    "terraform/server/README.md"
+  ],
+  "changed_paths": [
+    ".github/workflows/terraria-control.yml",
+    "docs/environment-config.md",
+    "terraform/server/variables.tf",
+    "terraform/server/main.tf",
+    "terraform/server/README.md"
+  ],
+  "created_paths": [
+    ".github/workflows/terraria-control.yml",
+    "docs/environment-config.md",
+    "terraform/server/variables.tf",
+    "terraform/server/main.tf",
+    "terraform/server/README.md"
+  ],
+  "modified_paths": [],
+  "counts": {
+    "requested": 5,
+    "changed": 5,
+    "created": 5,
+    "unchanged": 0
+  },
+  "summary": "Applied 5 changes across 5 files.",
+  "files": [
+    {
+      "path": ".github/workflows/terraria-control.yml",
+      "action": "write",
+      "changed": true,
+      "created": true,
+      "new_sha256": "b82c32bfc5c226af9431ab2b703478e3a924609a4cd0ce32af54fdeef2b19fb2"
+    },
+    {
+      "path": "docs/environment-config.md",
+      "action": "write",
+      "changed": true,
+      "created": true,
+      "new_sha256": "279b5c766ff431b2dfc7cdb3c8f5d16e4ab0409ab583c307fa2e20b342421847"
+    },
+    {
+      "path": "terraform/server/variables.tf",
+      "action": "write",
+      "changed": true,
+      "created": true,
+      "new_sha256": "8e301593d9632ea761df7c2b4e217f598d0d916a223263209d06b36545b335b5"
+    },
+    {
+      "path": "terraform/server/main.tf",
+      "action": "write",
+      "changed": true,
+      "created": true,
+      "new_sha256": "c694e88e743b6c8b1a1fdee11d9d32cec88c767bd0e215ddf596786338d975d8"
+    },
+    {
+      "path": "terraform/server/README.md",
+      "action": "write",
+      "changed": true,
+      "created": true,
+      "new_sha256": "42e4f68e2724deaf5dd800d4c5ff990e04be487cefd3e5a1ff9f53218836b87e"
+    }
+  ],
+  "rollback_hint": {
+    "executable": false,
+    "reason": "First-class rollback is not implemented yet; use reviewed git restore or cleanup workflows.",
+    "paths": [
+      {
+        "path": ".github/workflows/terraria-control.yml",
+        "strategy": "cleanup_created",
+        "reason": "Created path can be removed through reviewed cleanup workflow."
+      },
+      {
+        "path": "docs/environment-config.md",
+        "strategy": "cleanup_created",
+        "reason": "Created path can be removed through reviewed cleanup workflow."
+      },
+      {
+        "path": "terraform/server/variables.tf",
+        "strategy": "cleanup_created",
+        "reason": "Created path can be removed through reviewed cleanup workflow."
+      },
+      {
+        "path": "terraform/server/main.tf",
+        "strategy": "cleanup_created",
+        "reason": "Created path can be removed through reviewed cleanup workflow."
+      },
+      {
+        "path": "terraform/server/README.md",
+        "strategy": "cleanup_created",
+        "reason": "Created path can be removed through reviewed cleanup workflow."
+      }
+    ]
+  }
+}

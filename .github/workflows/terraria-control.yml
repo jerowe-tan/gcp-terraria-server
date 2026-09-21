@@ -1,0 +1,91 @@
+name: Terraria Server Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Server action
+        required: true
+        type: choice
+        options:
+          - status
+          - start
+          - stop
+
+permissions:
+  contents: read
+  "id\u002dtoken": write
+
+concurrency:
+  group: terraria-server-control
+  cancel-in-progress: false
+
+jobs:
+  control:
+    name: ${{ inputs.action }} Terraria server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Validate required repository variables
+        shell: bash
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_ZONE: ${{ vars.GCP_ZONE }}
+          VM_NAME: ${{ vars.VM_NAME }}
+        run: |
+          set -euo pipefail
+          for name in GCP_PROJECT_ID GCP_ZONE VM_NAME; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub Actions repository variable: $name"
+              exit 1
+            fi
+          done
+
+      - name: Show current VM status
+        if: inputs.action == 'status'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute instances describe "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"             --format="table(name,status,networkInterfaces[0].networkIP,networkInterfaces[0].accessConfigs[0].natIP)"
+
+      - name: Start VM
+        if: inputs.action == 'start'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute instances start "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"
+
+      - name: Show connection details after start
+        if: inputs.action == 'start'
+        shell: bash
+        run: |
+          set -euo pipefail
+          PUBLIC_IP="$(gcloud compute instances describe "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"             --format='get(networkInterfaces[0].accessConfigs[0].natIP)')"
+
+          echo "Terraria VM started."
+          echo "Public IP: ${PUBLIC_IP}"
+          echo "Terraria endpoint: ${PUBLIC_IP}:7777"
+
+      - name: Stop VM
+        if: inputs.action == 'stop'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "::warning::Current stop action does not yet perform Terraria save/backup verification."
+          echo "::warning::Add the safe-stop backup flow before relying on this for important worlds."
+
+          gcloud compute instances stop "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"
