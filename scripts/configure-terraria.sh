@@ -25,7 +25,7 @@ cleanup() {
 trap cleanup EXIT
 
 [[ -x "$TERRARIA_INSTALL_DIR/current/TerrariaServer.bin.x86_64" ]] \
-  || die "Terraria is not installed. Run the setup workflow with action 'install' first."
+  || die "Terraria is not installed. Run the Terraria Server Setup workflow first."
 
 id "$TERRARIA_LINUX_USER" >/dev/null 2>&1 \
   || die "Linux user '$TERRARIA_LINUX_USER' does not exist. Run the installer first."

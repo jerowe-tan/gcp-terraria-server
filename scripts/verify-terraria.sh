@@ -15,7 +15,7 @@ CONFIG="/etc/terraria/serverconfig.txt"
 WORLD_PATH_FILE="/etc/terraria/world-path"
 
 [[ -x "$BINARY" ]] || die "Terraria binary is missing or not executable: $BINARY"
-[[ -f "$CONFIG" ]] || die "Terraria is installed, but no server configuration exists. Run the setup workflow with action 'create-world'."
+[[ -f "$CONFIG" ]] || die "Terraria is installed, but no server configuration exists. Run the Terraria World workflow with action 'create-world'."
 [[ -f "$WORLD_PATH_FILE" ]] || die "World path metadata is missing: $WORLD_PATH_FILE"
 
 WORLD_PATH="$(cat "$WORLD_PATH_FILE")"

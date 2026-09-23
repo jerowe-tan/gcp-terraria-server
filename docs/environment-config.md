@@ -20,12 +20,24 @@ GitHub repository
 
 | Variable | Required now? | Current / expected value | Purpose |
 | --- | --- | --- | --- |
-| `GCP_PROJECT_ID` | Yes | `tmpsh-recreation-service` | Google Cloud project containing the VM. |
+| `GCP_PROJECT_ID` | Yes | `tmsph-recreation-service` | Google Cloud project containing the VM. |
 | `GCP_ZONE` | Yes | `us-central1-f` | Zone containing `terraria-server`. |
 | `VM_NAME` | Yes | `terraria-server` | Compute Engine instance controlled by GitHub Actions. |
-| `GCP_SERVICE_ACCOUNT` | Yes | `github-terraria-control@tmpsh-recreation-service.iam.gserviceaccount.com` | Service account impersonated through Workload Identity Federation. |
+| `GCP_SERVICE_ACCOUNT` | Yes | `github-terraria-control@tmsph-recreation-service.iam.gserviceaccount.com` | Service account impersonated through Workload Identity Federation. |
+| `TERRARIA_VERSION` | Yes for setup | `1458` | Dedicated server package version. |
+| `TERRARIA_INSTALL_DIR` | Yes for setup and world | `/opt/terraria` | Server installation directory. |
+| `TERRARIA_LINUX_USER` | Yes for setup, world, and backup setup | `jrw` | Linux account that runs Terraria and backup service. |
+| `TERRARIA_PORT` | Yes for setup and world | `7777` | Server TCP port. |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes | Pending creation/verification | Full WIF provider resource name. |
 | `DUCKDNS_SUBDOMAIN` | Optional | TBD | DuckDNS subdomain to update after VM start. |
+
+The manual workflows use these variables:
+
+1. Run `Terraria Server Control` with `start` if the VM is stopped.
+2. Run `Terraria Server Setup` to install Terraria and its systemd service. This does not create or start a world.
+3. Run `Terraria World` with `create-world` to configure and create the world, then start the server. This action refuses to replace an existing world or server configuration.
+4. Run `Terraria World` with `verify` to check an already running server.
+5. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token and enable the timer as described in `docs/backup-restore.md`. The same workflow offers `backup-now` and `status`.
 
 The WIF provider variable must use the full provider resource name:
 
@@ -68,7 +80,7 @@ The workflow is intentionally manual-only. It does not use `push` or `pull_reque
 
 | Setting | Current / expected value | Where configured |
 | --- | --- | --- |
-| Project ID | `tmpsh-recreation-service` | Google Cloud project |
+| Project ID | `tmsph-recreation-service` | Google Cloud project |
 | Project Number | **TODO / verify** | Google Cloud project details |
 | VM name | `terraria-server` | Compute Engine |
 | Zone | `us-central1-f` | Compute Engine |
@@ -81,7 +93,7 @@ The workflow is intentionally manual-only. It does not use `push` or `pull_reque
 | VM network tag | Expected `terraria-server` | Compute Engine network tags |
 | Firewall rule | **VERIFY** | VPC firewall |
 | External IP | Ephemeral | Compute Engine |
-| Service account | `github-terraria-control@tmpsh-recreation-service.iam.gserviceaccount.com` | IAM |
+| Service account | `github-terraria-control@tmsph-recreation-service.iam.gserviceaccount.com` | IAM |
 | Current service-account role | Compute Instance Admin (v1) | IAM |
 
 ## 5. Workload Identity Federation
@@ -143,7 +155,7 @@ The files under `terraform/server/` are reference scaffolding only and are not t
 
 | Terraform variable | Example / status |
 | --- | --- |
-| `project_id` | `tmpsh-recreation-service` |
+| `project_id` | `tmsph-recreation-service` |
 | `region` | `us-central1` |
 | `zone` | `us-central1-f` |
 | `instance_name` | `terraria-server` |
@@ -173,7 +185,7 @@ Never commit Terraform state, service-account JSON keys, private keys, GitHub to
 
 ## 9. Current workflow
 
-The control workflow at `.github/workflows/terraria-control.yml` is manually triggered with `workflow_dispatch` and supports:
+The control workflow at `.github/workflows/terraria-server-control.yml` is manually triggered with `workflow_dispatch` and supports:
 
 ```text
 status

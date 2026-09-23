@@ -5,8 +5,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=terraria
-Group=terraria
+User=@@TERRARIA_USER@@
+Group=@@TERRARIA_USER@@
 EnvironmentFile=/etc/terraria-backup.env
 Environment=BACKUP_STATE_DIR=/var/lib/terraria-backup
 StateDirectory=terraria-backup

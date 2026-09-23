@@ -30,9 +30,11 @@ If the repository is public, its published release assets are also publicly acce
 ```text
 scripts/backup-world-to-github.sh
 scripts/restore-world-from-github.sh
+scripts/install-backup.sh
 
 systemd/terraria-world-backup.service
 systemd/terraria-world-backup.timer
+.github/workflows/terraria-backup-setup.yml
 ```
 
 The systemd timer starts the backup service every 10 minutes while the VM is running.
@@ -66,7 +68,7 @@ GITHUB_BACKUP_REPOSITORY=jerowe-tan/gcp-terraria-server
 GITHUB_BACKUP_RELEASE_TAG=terraria-world-backups
 GITHUB_BACKUP_RELEASE_NAME=Terraria World Backups
 
-TERRARIA_WORLD_PATH=/replace/with/the/real/path/OurWorld.wld
+TERRARIA_WORLD_PATH=/home/jrw/.local/share/Terraria/Worlds/OurWorld.wld
 BACKUP_FILE_PREFIX=terraria-world
 MAX_WORLD_BACKUPS=10
 TERRARIA_SAVE_SETTLE_SECONDS=2
@@ -94,30 +96,17 @@ sudo chmod 600 /etc/terraria-backup.env
 
 ## Install on the VM
 
-Install required packages:
+After Terraria Server Setup and Terraria World succeed, run **Terraria Backup Setup** with `install`. It reads the GitHub repository variable `TERRARIA_LINUX_USER`, installs the scripts and timer, and renders the backup service to run as that Linux user. For the current value `jrw`, both `User=` and `Group=` become `jrw`.
+
+The workflow does not transfer a GitHub token. Create `/etc/terraria-backup.env` on the VM as shown above. Use the actual world path from `/etc/terraria/world-path`. Then enable the timer:
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y curl jq
-```
-
-Install the scripts:
-
-```bash
-sudo install -m 0755 scripts/backup-world-to-github.sh /usr/local/bin/backup-world-to-github.sh
-sudo install -m 0755 scripts/restore-world-from-github.sh /usr/local/bin/restore-world-from-github.sh
-```
-
-Install the units:
-
-```bash
-sudo install -m 0644 systemd/terraria-world-backup.service /etc/systemd/system/
-sudo install -m 0644 systemd/terraria-world-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
 sudo systemctl enable --now terraria-world-backup.timer
 ```
 
-The service currently assumes the Terraria Linux user/group is `terraria`. Change `User=` and `Group=` in the service unit before installation if the actual Terraria process uses another account.
+The timer remains disabled until that command runs. Re-running the setup workflow updates backup tools and service user without replacing the VM-local token.
+
+The workflow also offers `backup-now` for an immediate backup and `status` to inspect the timer and recent backup logs. Both require a running VM and an installed backup service.
 
 Check the timer:
 
