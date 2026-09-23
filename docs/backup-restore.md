@@ -96,7 +96,7 @@ sudo chmod 600 /etc/terraria-backup.env
 
 ## Install on the VM
 
-After Terraria Server Setup and Terraria World succeed, run **Terraria Backup Setup** with `install`. It reads the GitHub repository variable `TERRARIA_LINUX_USER`, installs the scripts and timer, and renders the backup service to run as that Linux user. For the current value `jrw`, both `User=` and `Group=` become `jrw`.
+After Terraria Server Setup and Terraria World Creation succeed, run **Terraria Backup Setup** with `install`. It reads the GitHub repository variable `TERRARIA_LINUX_USER`, installs the scripts and timer, and renders the backup service to run as that Linux user. For the current value `jrw`, both `User=` and `Group=` become `jrw`.
 
 The workflow does not transfer a GitHub token. Create `/etc/terraria-backup.env` on the VM as shown above. Use the actual world path from `/etc/terraria/world-path`. Then run **Terraria Backup Setup → `enable`**. It runs one backup first; if that succeeds, it enables and starts the 10-minute timer. Equivalent VM command after a successful manual backup:
 

@@ -1,48 +1,11 @@
-name: Terraria World
+name: Terraria World Switch
 
 on:
   workflow_dispatch:
     inputs:
-      action:
-        description: World action
-        required: true
-        type: choice
-        options:
-          - create-world
-          - list-worlds
-          - delete-world
-          - verify
       world_name:
-        description: World name (used for create-world or delete-world)
-        required: false
-        default: TerrariaWorld
-        type: string
-      confirm_delete:
-        description: For delete-world, type DELETE followed by space and exact listed world name
-        required: false
-        default: ""
-        type: string
-      world_size:
-        description: World size
-        required: false
-        default: medium
-        type: choice
-        options: [small, medium, large]
-      difficulty:
-        description: World difficulty
-        required: false
-        default: classic
-        type: choice
-        options: [classic, expert, master, journey]
-      max_players:
-        description: Maximum players
-        required: false
-        default: "8"
-        type: string
-      seed:
-        description: Optional world seed
-        required: false
-        default: ""
+        description: Exact listed world filename without .wld
+        required: true
         type: string
 
 permissions:
@@ -55,7 +18,7 @@ concurrency:
 
 jobs:
   world:
-    name: ${{ inputs.action }} Terraria world
+    name: Terraria World Switch
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -69,14 +32,8 @@ jobs:
       TERRARIA_LINUX_USER: ${{ vars.TERRARIA_LINUX_USER }}
       TERRARIA_PORT: ${{ vars.TERRARIA_PORT }}
       WORLD_NAME: ${{ inputs.world_name }}
-      CONFIRM_DELETE: ${{ inputs.confirm_delete }}
-      WORLD_SIZE: ${{ inputs.world_size }}
-      WORLD_DIFFICULTY: ${{ inputs.difficulty }}
-      MAX_PLAYERS: ${{ inputs.max_players }}
-      WORLD_SEED: ${{ inputs.seed }}
-      REMOTE_BUNDLE: /tmp/terraria-world-${{ github.run_id }}.tgz
-      REMOTE_DIR: /var/tmp/terraria-world-${{ github.run_id }}
-      REMOTE_PASSWORD_FILE: /tmp/terraria-password-${{ github.run_id }}.txt
+      REMOTE_BUNDLE: /tmp/terraria-world-switch-${{ github.run_id }}.tgz
+      REMOTE_DIR: /var/tmp/terraria-world-switch-${{ github.run_id }}
 
     steps:
       - name: Checkout repository
@@ -95,32 +52,12 @@ jobs:
           done
           [[ "$TERRARIA_PORT" =~ ^[0-9]+$ ]] && (( TERRARIA_PORT >= 1 && TERRARIA_PORT <= 65535 )) || { echo "::error::TERRARIA_PORT must be between 1 and 65535."; exit 1; }
 
-      - name: Validate world inputs
-        if: inputs.action == 'create-world'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ ! "$WORLD_NAME" =~ ^[A-Za-z0-9._[:space:]-]+$ ]]; then
-            echo "::error::World name may contain letters, numbers, spaces, dots, underscores, and hyphens only."
-            exit 1
-          fi
-          if [[ -n "$WORLD_SEED" && ! "$WORLD_SEED" =~ ^[A-Za-z0-9._[:space:]-]+$ ]]; then
-            echo "::error::Seed may contain letters, numbers, spaces, dots, underscores, and hyphens only."
-            exit 1
-          fi
-          [[ "$MAX_PLAYERS" =~ ^[0-9]+$ ]] && (( MAX_PLAYERS >= 1 && MAX_PLAYERS <= 255 )) || { echo "::error::Maximum players must be between 1 and 255."; exit 1; }
-
-      - name: Validate deletion inputs
-        if: inputs.action == 'delete-world'
+      - name: Validate switch input
         shell: bash
         run: |
           set -euo pipefail
           if [[ ! "$WORLD_NAME" =~ ^[A-Za-z0-9._-]+$ || "$WORLD_NAME" == . || "$WORLD_NAME" == .. ]]; then
             echo "::error::Use exact filename shown by list-worlds, without .wld."
-            exit 1
-          fi
-          if [[ "$CONFIRM_DELETE" != "DELETE $WORLD_NAME" ]]; then
-            echo "::error::Confirmation must be: DELETE $WORLD_NAME"
             exit 1
           fi
 
@@ -172,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          files=(scripts/configure-terraria.sh scripts/verify-terraria.sh scripts/manage-worlds.sh)
+          files=(scripts/verify-terraria.sh scripts/manage-worlds.sh)
           for path in "${files[@]}"; do
             [[ -f "$path" ]] || { echo "::error::Required repository file is missing: $path"; exit 1; }
           done
@@ -189,58 +126,16 @@ jobs:
           gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
             --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
 
-      - name: Copy optional Terraria password
-        if: inputs.action == 'create-world'
-        shell: bash
-        env:
-          TERRARIA_PASSWORD: ${{ secrets.TERRARIA_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${TERRARIA_PASSWORD:-}" ]]; then
-            echo "No TERRARIA_PASSWORD secret is configured; the server will have no password."
-            exit 0
-          fi
-          PASSWORD_FILE="$RUNNER_TEMP/terraria-password.txt"
-          printf '%s' "$TERRARIA_PASSWORD" > "$PASSWORD_FILE"
-          chmod 600 "$PASSWORD_FILE"
-          gcloud compute scp "$PASSWORD_FILE" "${VM_NAME}:${REMOTE_PASSWORD_FILE}" \
-            --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --tunnel-through-iap --quiet
-
-      - name: Create and start world
-        if: inputs.action == 'create-world'
+      - name: Switch world
         shell: bash
         run: |
           set -euo pipefail
-          printf -v REMOTE_COMMAND \
-            'sudo env TERRARIA_INSTALL_DIR=%q TERRARIA_LINUX_USER=%q TERRARIA_PORT=%q WORLD_NAME=%q WORLD_SIZE=%q WORLD_DIFFICULTY=%q MAX_PLAYERS=%q WORLD_SEED=%q START_SERVER=%q PASSWORD_FILE=%q bash %q' \
-            "$TERRARIA_INSTALL_DIR" "$TERRARIA_LINUX_USER" "$TERRARIA_PORT" "$WORLD_NAME" "$WORLD_SIZE" \
-            "$WORLD_DIFFICULTY" "$MAX_PLAYERS" "$WORLD_SEED" "true" "$REMOTE_PASSWORD_FILE" \
-            "$REMOTE_DIR/scripts/configure-terraria.sh"
-          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
-            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
-
-      - name: List worlds
-        if: inputs.action == 'list-worlds'
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf -v REMOTE_COMMAND 'sudo env TERRARIA_LINUX_USER=%q bash %q list' \
-            "$TERRARIA_LINUX_USER" "$REMOTE_DIR/scripts/manage-worlds.sh"
-          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
-            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
-
-      - name: Delete world
-        if: inputs.action == 'delete-world'
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf -v REMOTE_COMMAND 'sudo env TERRARIA_LINUX_USER=%q bash %q delete %q %q' \
-            "$TERRARIA_LINUX_USER" "$REMOTE_DIR/scripts/manage-worlds.sh" "$WORLD_NAME" "$CONFIRM_DELETE"
+          printf -v REMOTE_COMMAND 'sudo env TERRARIA_LINUX_USER=%q bash %q switch %q' \
+            "$TERRARIA_LINUX_USER" "$REMOTE_DIR/scripts/manage-worlds.sh" "$WORLD_NAME"
           gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
             --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
 
       - name: Verify Terraria server
-        if: inputs.action == 'verify' || inputs.action == 'create-world'
         shell: bash
         run: |
           set -euo pipefail
@@ -251,7 +146,6 @@ jobs:
             --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
 
       - name: Show connection details
-        if: inputs.action == 'verify' || inputs.action == 'create-world'
         shell: bash
         run: |
           set -euo pipefail
@@ -269,5 +163,5 @@ jobs:
           set +e
           gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
             --tunnel-through-iap --quiet \
-            --command="sudo rm -rf '$REMOTE_DIR' '$REMOTE_BUNDLE' '$REMOTE_PASSWORD_FILE'" \
+            --command="sudo rm -rf '$REMOTE_DIR' '$REMOTE_BUNDLE'" \
             >/dev/null 2>&1 || true

@@ -1,0 +1,143 @@
+name: Terraria World Verify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraria-server-setup
+  cancel-in-progress: false
+
+jobs:
+  world:
+    name: Terraria World Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      VM_NAME: ${{ vars.VM_NAME }}
+      GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      TERRARIA_INSTALL_DIR: ${{ vars.TERRARIA_INSTALL_DIR }}
+      TERRARIA_LINUX_USER: ${{ vars.TERRARIA_LINUX_USER }}
+      TERRARIA_PORT: ${{ vars.TERRARIA_PORT }}
+      REMOTE_BUNDLE: /tmp/terraria-world-verify-${{ github.run_id }}.tgz
+      REMOTE_DIR: /var/tmp/terraria-world-verify-${{ github.run_id }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate repository variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(GCP_PROJECT_ID GCP_ZONE VM_NAME GCP_SERVICE_ACCOUNT GCP_WORKLOAD_IDENTITY_PROVIDER TERRARIA_INSTALL_DIR TERRARIA_LINUX_USER TERRARIA_PORT)
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Missing GitHub repository variable: ${name}"
+              exit 1
+            fi
+          done
+          [[ "$TERRARIA_PORT" =~ ^[0-9]+$ ]] && (( TERRARIA_PORT >= 1 && TERRARIA_PORT <= 65535 )) || { echo "::error::TERRARIA_PORT must be between 1 and 65535."; exit 1; }
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Check VM is running
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! STATUS="$(gcloud compute instances describe "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)')"; then
+            echo "::error::Could not find or inspect VM '$VM_NAME' in zone '$GCP_ZONE'."
+            exit 1
+          fi
+          if [[ "$STATUS" != "RUNNING" ]]; then
+            echo "::error::Terraria VM is not running (current state: $STATUS). Run 'Terraria Server Control' with action 'start' first."
+            exit 1
+          fi
+          echo "VM '$VM_NAME' is RUNNING."
+
+      - name: Test IAP and OS Login
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG_FILE="$RUNNER_TEMP/iap-ssh-test.log"
+          if ! gcloud compute ssh "$VM_NAME" \
+            --project="$GCP_PROJECT_ID" \
+            --zone="$GCP_ZONE" \
+            --tunnel-through-iap \
+            --quiet \
+            --command='set -e; echo "IAP/OS Login connection successful"; echo "Remote user: $(whoami)"; sudo -n true; echo "sudo access successful"' \
+            >"$LOG_FILE" 2>&1; then
+            cat "$LOG_FILE"
+            echo "::error::Could not connect through IAP/OS Login. Check OS Login, Compute OS Admin Login, IAP-Secured Tunnel User, Service Account User on the VM service account, and the IAP TCP 22 firewall rule."
+            exit 1
+          fi
+          cat "$LOG_FILE"
+
+      - name: Package world files
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(scripts/verify-terraria.sh)
+          for path in "${files[@]}"; do
+            [[ -f "$path" ]] || { echo "::error::Required repository file is missing: $path"; exit 1; }
+          done
+          tar -czf "$RUNNER_TEMP/terraria-world.tgz" "${files[@]}"
+
+      - name: Copy world files to VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute scp "$RUNNER_TEMP/terraria-world.tgz" "${VM_NAME}:${REMOTE_BUNDLE}" \
+            --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --tunnel-through-iap --quiet
+          printf -v REMOTE_COMMAND 'sudo rm -rf %q && sudo install -d -m 0755 %q && sudo tar -xzf %q -C %q' \
+            "$REMOTE_DIR" "$REMOTE_DIR" "$REMOTE_BUNDLE" "$REMOTE_DIR"
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
+
+      - name: Verify Terraria server
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND \
+            'sudo env TERRARIA_INSTALL_DIR=%q TERRARIA_LINUX_USER=%q TERRARIA_PORT=%q bash %q' \
+            "$TERRARIA_INSTALL_DIR" "$TERRARIA_LINUX_USER" "$TERRARIA_PORT" "$REMOTE_DIR/scripts/verify-terraria.sh"
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
+
+      - name: Show connection details
+        shell: bash
+        run: |
+          set -euo pipefail
+          PUBLIC_IP="$(gcloud compute instances describe "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
+          if [[ -n "$PUBLIC_IP" ]]; then
+            echo "Terraria endpoint: ${PUBLIC_IP}:${TERRARIA_PORT}"
+          else
+            echo "::notice::The VM has no external IPv4 address."
+          fi
+
+      - name: Cleanup remote world files
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet \
+            --command="sudo rm -rf '$REMOTE_DIR' '$REMOTE_BUNDLE'" \
+            >/dev/null 2>&1 || true
