@@ -35,9 +35,10 @@ The manual workflows use these variables:
 
 1. Run `Terraria Server Control` with `start` if the VM is stopped.
 2. Run `Terraria Server Setup` to install Terraria and its systemd service. This does not create or start a world.
-3. Run `Terraria World` with `create-world` to configure and create the world, then start the server. This action refuses to replace an existing world or server configuration.
-4. Run `Terraria World` with `verify` to check an already running server.
-5. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token, then use `enable` to start scheduled backups. The same workflow offers `disable`, `backup-now`, and `status`; see `docs/backup-restore.md`.
+3. Run `Terraria World` with `create-world` to configure and create the world, then start the server. This action refuses to replace an existing world or different server configuration. If generation failed before creating the `.wld`, rerun with the same `world_name` to repair directory ownership and retry the existing configuration.
+4. Run `Terraria World` with `list-worlds` to print world filenames, active status, and sizes in the Actions log. Run `verify` to check an already running server.
+5. To remove a world, run `Terraria World` with `delete-world`, set `world_name` to the exact filename from `list-worlds` without `.wld`, and enter `DELETE <world_name>` in `confirm_delete`. This permanently removes the VM's `.wld` and `.wld.bak` files. Deleting the active world stops the server, disables its backup timer, and removes its server configuration; GitHub Release backups remain available. After creating a replacement world, update `TERRARIA_WORLD_PATH` in `/etc/terraria-backup.env` and enable backups again.
+6. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token, then use `enable` to start scheduled backups. The same workflow offers `disable`, `backup-now`, and `status`; see `docs/backup-restore.md`.
 
 `Terraria Server Control → start` updates DuckDNS after the VM starts; `stop` clears its records after the VM stops. `Terraria Domain` offers manual `sync` and `clear`. `sync` requires a running VM and reads its public IPv4 address. DNS supplies a hostname, not a proxy; players connect to `jrw-terraria.duckdns.org:7777`. DNS propagation may take time.
 

@@ -43,8 +43,13 @@ fi
 
 install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 "$TERRARIA_INSTALL_DIR"
 install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 "$TERRARIA_INSTALL_DIR/releases"
-install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 \
-  "/home/$TERRARIA_LINUX_USER/.local/share/Terraria/Worlds"
+for path in \
+  "/home/$TERRARIA_LINUX_USER/.local" \
+  "/home/$TERRARIA_LINUX_USER/.local/share" \
+  "/home/$TERRARIA_LINUX_USER/.local/share/Terraria" \
+  "/home/$TERRARIA_LINUX_USER/.local/share/Terraria/Worlds"; do
+  install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 "$path"
+done
 install -d -o root -g "$TERRARIA_LINUX_USER" -m 0750 /etc/terraria
 
 RELEASE_DIR="$TERRARIA_INSTALL_DIR/releases/$TERRARIA_VERSION"

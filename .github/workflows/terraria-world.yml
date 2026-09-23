@@ -9,11 +9,18 @@ on:
         type: choice
         options:
           - create-world
+          - list-worlds
+          - delete-world
           - verify
       world_name:
-        description: World name (used for create-world)
+        description: World name (used for create-world or delete-world)
         required: false
         default: TerrariaWorld
+        type: string
+      confirm_delete:
+        description: For delete-world, type DELETE followed by space and exact listed world name
+        required: false
+        default: ""
         type: string
       world_size:
         description: World size
@@ -62,6 +69,7 @@ jobs:
       TERRARIA_LINUX_USER: ${{ vars.TERRARIA_LINUX_USER }}
       TERRARIA_PORT: ${{ vars.TERRARIA_PORT }}
       WORLD_NAME: ${{ inputs.world_name }}
+      CONFIRM_DELETE: ${{ inputs.confirm_delete }}
       WORLD_SIZE: ${{ inputs.world_size }}
       WORLD_DIFFICULTY: ${{ inputs.difficulty }}
       MAX_PLAYERS: ${{ inputs.max_players }}
@@ -101,6 +109,20 @@ jobs:
             exit 1
           fi
           [[ "$MAX_PLAYERS" =~ ^[0-9]+$ ]] && (( MAX_PLAYERS >= 1 && MAX_PLAYERS <= 255 )) || { echo "::error::Maximum players must be between 1 and 255."; exit 1; }
+
+      - name: Validate deletion inputs
+        if: inputs.action == 'delete-world'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$WORLD_NAME" =~ ^[A-Za-z0-9._-]+$ || "$WORLD_NAME" == . || "$WORLD_NAME" == .. ]]; then
+            echo "::error::Use exact filename shown by list-worlds, without .wld."
+            exit 1
+          fi
+          if [[ "$CONFIRM_DELETE" != "DELETE $WORLD_NAME" ]]; then
+            echo "::error::Confirmation must be: DELETE $WORLD_NAME"
+            exit 1
+          fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -150,7 +172,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          files=(scripts/configure-terraria.sh scripts/verify-terraria.sh)
+          files=(scripts/configure-terraria.sh scripts/verify-terraria.sh scripts/manage-worlds.sh)
           for path in "${files[@]}"; do
             [[ -f "$path" ]] || { echo "::error::Required repository file is missing: $path"; exit 1; }
           done
@@ -194,6 +216,26 @@ jobs:
             "$TERRARIA_INSTALL_DIR" "$TERRARIA_LINUX_USER" "$TERRARIA_PORT" "$WORLD_NAME" "$WORLD_SIZE" \
             "$WORLD_DIFFICULTY" "$MAX_PLAYERS" "$WORLD_SEED" "true" "$REMOTE_PASSWORD_FILE" \
             "$REMOTE_DIR/scripts/configure-terraria.sh"
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
+
+      - name: List worlds
+        if: inputs.action == 'list-worlds'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'sudo env TERRARIA_LINUX_USER=%q bash %q list' \
+            "$TERRARIA_LINUX_USER" "$REMOTE_DIR/scripts/manage-worlds.sh"
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
+
+      - name: Delete world
+        if: inputs.action == 'delete-world'
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf -v REMOTE_COMMAND 'sudo env TERRARIA_LINUX_USER=%q bash %q delete %q %q' \
+            "$TERRARIA_LINUX_USER" "$REMOTE_DIR/scripts/manage-worlds.sh" "$WORLD_NAME" "$CONFIRM_DELETE"
           gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
             --tunnel-through-iap --quiet --command="$REMOTE_COMMAND"
 

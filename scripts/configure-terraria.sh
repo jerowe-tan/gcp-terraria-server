@@ -62,15 +62,29 @@ WORLD_DIR="/home/$TERRARIA_LINUX_USER/.local/share/Terraria/Worlds"
 WORLD_PATH="$WORLD_DIR/$WORLD_FILENAME.wld"
 CONFIG_PATH="/etc/terraria/serverconfig.txt"
 
-install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 "$WORLD_DIR"
+for path in \
+  "/home/$TERRARIA_LINUX_USER/.local" \
+  "/home/$TERRARIA_LINUX_USER/.local/share" \
+  "/home/$TERRARIA_LINUX_USER/.local/share/Terraria" \
+  "$WORLD_DIR"; do
+  install -d -o "$TERRARIA_LINUX_USER" -g "$TERRARIA_LINUX_USER" -m 0755 "$path"
+done
 install -d -o root -g "$TERRARIA_LINUX_USER" -m 0750 /etc/terraria
 
 if [[ -e "$WORLD_PATH" ]]; then
   die "World already exists: $WORLD_PATH. No world was replaced."
 fi
 
+REUSE_CONFIG=false
 if [[ -e "$CONFIG_PATH" ]]; then
-  die "A Terraria server configuration already exists at $CONFIG_PATH. Refusing to replace it automatically."
+  CONFIG_WORLD="$(awk -F= '$1 == "world" {print substr($0, 7); exit}' "$CONFIG_PATH")"
+  if [[ "$CONFIG_WORLD" != "$WORLD_PATH" || ! -f /etc/terraria/world-path || "$(< /etc/terraria/world-path)" != "$WORLD_PATH" ]]; then
+    die "A different or incomplete Terraria server configuration exists at $CONFIG_PATH. Refusing to replace it automatically."
+  fi
+  REUSE_CONFIG=true
+  log "Retrying existing world configuration after incomplete generation."
+elif [[ -e /etc/terraria/world-path ]]; then
+  die "World path metadata already exists at /etc/terraria/world-path. Refusing to replace it automatically."
 fi
 
 PASSWORD=""
@@ -81,25 +95,27 @@ if [[ -n "$PASSWORD_FILE" && -f "$PASSWORD_FILE" ]]; then
   fi
 fi
 
-TEMP_CONFIG="$(mktemp)"
-trap 'rm -f -- "$TEMP_CONFIG"; cleanup' EXIT
+if [[ "$REUSE_CONFIG" == false ]]; then
+  TEMP_CONFIG="$(mktemp)"
+  trap 'rm -f -- "$TEMP_CONFIG"; cleanup' EXIT
 
-{
-  printf 'world=%s\n' "$WORLD_PATH"
-  printf 'autocreate=%s\n' "$WORLD_SIZE_CODE"
-  printf 'worldname=%s\n' "$WORLD_NAME"
-  printf 'difficulty=%s\n' "$WORLD_DIFFICULTY_CODE"
-  printf 'maxplayers=%s\n' "$MAX_PLAYERS"
-  printf 'port=%s\n' "$TERRARIA_PORT"
-  printf 'password=%s\n' "$PASSWORD"
-  if [[ -n "$WORLD_SEED" ]]; then
-    printf 'seed=%s\n' "$WORLD_SEED"
-  fi
-} > "$TEMP_CONFIG"
+  {
+    printf 'world=%s\n' "$WORLD_PATH"
+    printf 'autocreate=%s\n' "$WORLD_SIZE_CODE"
+    printf 'worldname=%s\n' "$WORLD_NAME"
+    printf 'difficulty=%s\n' "$WORLD_DIFFICULTY_CODE"
+    printf 'maxplayers=%s\n' "$MAX_PLAYERS"
+    printf 'port=%s\n' "$TERRARIA_PORT"
+    printf 'password=%s\n' "$PASSWORD"
+    if [[ -n "$WORLD_SEED" ]]; then
+      printf 'seed=%s\n' "$WORLD_SEED"
+    fi
+  } > "$TEMP_CONFIG"
 
-install -o root -g "$TERRARIA_LINUX_USER" -m 0640 "$TEMP_CONFIG" "$CONFIG_PATH"
-printf '%s\n' "$WORLD_PATH" > /etc/terraria/world-path
-chmod 0644 /etc/terraria/world-path
+  install -o root -g "$TERRARIA_LINUX_USER" -m 0640 "$TEMP_CONFIG" "$CONFIG_PATH"
+  printf '%s\n' "$WORLD_PATH" > /etc/terraria/world-path
+  chmod 0644 /etc/terraria/world-path
+fi
 
 systemctl enable terraria.service
 
@@ -132,4 +148,6 @@ for attempt in $(seq 1 120); do
 done
 
 journalctl -u terraria.service -n 100 --no-pager >&2 || true
+ls -ld "/home/$TERRARIA_LINUX_USER/.local" "/home/$TERRARIA_LINUX_USER/.local/share" \
+  "/home/$TERRARIA_LINUX_USER/.local/share/Terraria" "$WORLD_DIR" >&2 || true
 die "Timed out waiting 10 minutes for Terraria to create the world file."

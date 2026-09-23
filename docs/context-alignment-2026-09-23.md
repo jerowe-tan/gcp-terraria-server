@@ -52,7 +52,7 @@ The five `GCP_*`/`VM_NAME` values drive all workflows. `TERRARIA_VERSION` is use
 
 GitHub **repository secrets**: `TERRARIA_PASSWORD` is optional and read only during `Terraria World → create-world`. `DUCKDNS_TOKEN` is required for DuckDNS updates and must remain secret. Do not put backup token or Google service-account JSON key into GitHub Secrets.
 
-`Terraria World → create-world` takes run inputs `world_name`, `world_size`, `difficulty`, `max_players`, and optional `seed`. These are not repository variables. The backup workflow takes `action` (`install`, `enable`, `disable`, `backup-now`, `status`); world workflow takes `action` (`create-world`, `verify`); control takes `action` (`status`, `start`, `stop`).
+`Terraria World → create-world` takes run inputs `world_name`, `world_size`, `difficulty`, `max_players`, and optional `seed`. These are not repository variables. The backup workflow takes `action` (`install`, `enable`, `disable`, `backup-now`, `status`); world workflow takes `action` (`create-world`, `list-worlds`, `delete-world`, `verify`); control takes `action` (`status`, `start`, `stop`). `delete-world` requires exact listed filename in `world_name` and `DELETE <world_name>` in `confirm_delete`.
 
 VM-local `/etc/terraria-backup.env` contains:
 
@@ -119,10 +119,10 @@ Intended remote path: GitHub Actions → GitHub OIDC → Google WIF → GitHub c
 | Terraria Server Control | `.github/workflows/terraria-server-control.yml` | `status`, `start`, `stop` |
 | Terraria Domain | `.github/workflows/terraria-domain.yml` | `sync`, `clear` |
 | Terraria Server Setup | `.github/workflows/terraria-server-setup.yml` | Install Terraria and systemd service only |
-| Terraria World | `.github/workflows/terraria-world.yml` | `create-world`, `verify` |
+| Terraria World | `.github/workflows/terraria-world.yml` | `create-world`, `list-worlds`, `delete-world`, `verify` |
 | Terraria Backup Setup | `.github/workflows/terraria-backup-setup.yml` | `install`, `enable`, `disable`, `backup-now`, `status` |
 
-Setup, world, and backup setup use GitHub WIF, check that VM is running, test IAP/OS Login and passwordless `sudo`, then execute repository scripts on the VM. They read configuration from GitHub repository variables. World creation refuses to replace an existing world or server config. `TERRARIA_PASSWORD` is an optional GitHub secret used for world configuration; world settings are manual workflow inputs.
+Setup, world, and backup setup use GitHub WIF, check that VM is running, test IAP/OS Login and passwordless `sudo`, then execute repository scripts on the VM. They read configuration from GitHub repository variables. World creation refuses to replace an existing world or different server config; if no `.wld` was created, rerunning with the same `world_name` repairs directory ownership and retries the existing configuration. `list-worlds` prints world filenames, active status, and sizes in Actions logs. `delete-world` removes the selected VM world and its local `.wld.bak`; when active, it also stops Terraria, disables the backup timer, and removes server configuration. GitHub Release backups remain. `TERRARIA_PASSWORD` is an optional GitHub secret used for world configuration; world settings are manual workflow inputs.
 
 DuckDNS is dynamic DNS, not a proxy. `Terraria Domain → sync` reads running VM public IPv4 from GCP and points `jrw-terraria.duckdns.org` at it. `clear` removes DuckDNS IP records. Server Control also syncs after `start` and clears after `stop` when `DUCKDNS_URL` and `DUCKDNS_TOKEN` are configured. Players use `jrw-terraria.duckdns.org:7777`; game firewall and server still need to be working.
 
@@ -155,6 +155,7 @@ terraria-server/
 │   ├── configure-terraria.sh
 │   ├── install-backup.sh
 │   ├── install-terraria.sh
+│   ├── manage-worlds.sh
 │   ├── restore-world-from-github.sh
 │   ├── update-duckdns.sh
 │   └── verify-terraria.sh
