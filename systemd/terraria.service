@@ -1,0 +1,18 @@
+[Unit]
+Description=Terraria Dedicated Server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@@TERRARIA_USER@@
+Group=@@TERRARIA_USER@@
+WorkingDirectory=@@INSTALL_DIR@@/current
+Environment=TERM=xterm
+ExecStart=@@INSTALL_DIR@@/current/TerrariaServer.bin.x86_64 -config /etc/terraria/serverconfig.txt
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
