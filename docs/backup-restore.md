@@ -98,15 +98,15 @@ sudo chmod 600 /etc/terraria-backup.env
 
 After Terraria Server Setup and Terraria World succeed, run **Terraria Backup Setup** with `install`. It reads the GitHub repository variable `TERRARIA_LINUX_USER`, installs the scripts and timer, and renders the backup service to run as that Linux user. For the current value `jrw`, both `User=` and `Group=` become `jrw`.
 
-The workflow does not transfer a GitHub token. Create `/etc/terraria-backup.env` on the VM as shown above. Use the actual world path from `/etc/terraria/world-path`. Then enable the timer:
+The workflow does not transfer a GitHub token. Create `/etc/terraria-backup.env` on the VM as shown above. Use the actual world path from `/etc/terraria/world-path`. Then run **Terraria Backup Setup → `enable`**. It runs one backup first; if that succeeds, it enables and starts the 10-minute timer. Equivalent VM command after a successful manual backup:
 
 ```bash
 sudo systemctl enable --now terraria-world-backup.timer
 ```
 
-The timer remains disabled until that command runs. Re-running the setup workflow updates backup tools and service user without replacing the VM-local token.
+The timer remains disabled until `enable` runs. Run **Terraria Backup Setup → `disable`** to stop scheduled backups. Disabling the timer does not delete existing GitHub Release assets or interrupt a backup already running. Re-running `install` updates backup tools and service user without replacing the VM-local token.
 
-The workflow also offers `backup-now` for an immediate backup and `status` to inspect the timer and recent backup logs. Both require a running VM and an installed backup service.
+The workflow also offers `backup-now` for an immediate backup and `status` to inspect the timer and recent backup logs. All actions require a running VM; actions other than `install` require an installed backup service.
 
 Check the timer:
 

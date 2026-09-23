@@ -7,7 +7,7 @@ on:
         description: Backup action
         required: true
         type: choice
-        options: [install, backup-now, status]
+        options: [install, enable, disable, backup-now, status]
 
 permissions:
   contents: read
@@ -135,6 +135,23 @@ jobs:
           set -euo pipefail
           gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
             --tunnel-through-iap --quiet --command='sudo systemctl start terraria-world-backup.service'
+
+      - name: Enable scheduled backups
+        if: inputs.action == 'enable'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet \
+            --command='sudo systemctl start terraria-world-backup.service && sudo systemctl enable --now terraria-world-backup.timer'
+
+      - name: Disable scheduled backups
+        if: inputs.action == 'disable'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud compute ssh "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command='sudo systemctl disable --now terraria-world-backup.timer'
 
       - name: Show backup status
         if: inputs.action == 'status'

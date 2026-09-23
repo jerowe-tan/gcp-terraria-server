@@ -37,7 +37,7 @@ The manual workflows use these variables:
 2. Run `Terraria Server Setup` to install Terraria and its systemd service. This does not create or start a world.
 3. Run `Terraria World` with `create-world` to configure and create the world, then start the server. This action refuses to replace an existing world or server configuration.
 4. Run `Terraria World` with `verify` to check an already running server.
-5. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token and enable the timer as described in `docs/backup-restore.md`. The same workflow offers `backup-now` and `status`.
+5. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token, then use `enable` to start scheduled backups. The same workflow offers `disable`, `backup-now`, and `status`; see `docs/backup-restore.md`.
 
 The WIF provider variable must use the full provider resource name:
 
