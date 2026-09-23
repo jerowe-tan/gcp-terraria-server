@@ -80,6 +80,22 @@ jobs:
           echo "Public IP: ${PUBLIC_IP}"
           echo "Terraria endpoint: ${PUBLIC_IP}:7777"
 
+      - name: Point DuckDNS to VM after start
+        if: inputs.action == 'start'
+        shell: bash
+        env:
+          DUCKDNS_URL: ${{ vars.DUCKDNS_URL }}
+          DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DUCKDNS_URL" || -z "$DUCKDNS_TOKEN" ]]; then
+            echo "::notice::DUCKDNS_URL or DUCKDNS_TOKEN is missing; skipping DNS update."
+            exit 0
+          fi
+          PUBLIC_IP="$(gcloud compute instances describe "${{ vars.VM_NAME }}" --zone="${{ vars.GCP_ZONE }}" --project="${{ vars.GCP_PROJECT_ID }}" --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
+          bash scripts/update-duckdns.sh sync "$PUBLIC_IP"
+          echo "Terraria domain: ${DUCKDNS_URL#https://}:${{ vars.TERRARIA_PORT || '7777' }}"
+
       - name: Stop VM
         if: inputs.action == 'stop'
         shell: bash
@@ -90,3 +106,17 @@ jobs:
           echo "::warning::This stop action does not yet force a final world backup immediately before VM shutdown."
 
           gcloud compute instances stop "${{ vars.VM_NAME }}"             --zone="${{ vars.GCP_ZONE }}"             --project="${{ vars.GCP_PROJECT_ID }}"
+
+      - name: Clear DuckDNS after stop
+        if: inputs.action == 'stop'
+        shell: bash
+        env:
+          DUCKDNS_URL: ${{ vars.DUCKDNS_URL }}
+          DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DUCKDNS_URL" || -z "$DUCKDNS_TOKEN" ]]; then
+            echo "::notice::DUCKDNS_URL or DUCKDNS_TOKEN is missing; skipping DNS clear."
+            exit 0
+          fi
+          bash scripts/update-duckdns.sh clear

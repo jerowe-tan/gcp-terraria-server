@@ -29,7 +29,7 @@ GitHub repository
 | `TERRARIA_LINUX_USER` | Yes for setup, world, and backup setup | `jrw` | Linux account that runs Terraria and backup service. |
 | `TERRARIA_PORT` | Yes for setup and world | `7777` | Server TCP port. |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Yes | Pending creation/verification | Full WIF provider resource name. |
-| `DUCKDNS_SUBDOMAIN` | Optional | TBD | DuckDNS subdomain to update after VM start. |
+| `DUCKDNS_URL` | For DuckDNS | `jrw-terraria.duckdns.org` | Hostname pointed at the VM's current public IPv4 address. |
 
 The manual workflows use these variables:
 
@@ -38,6 +38,8 @@ The manual workflows use these variables:
 3. Run `Terraria World` with `create-world` to configure and create the world, then start the server. This action refuses to replace an existing world or server configuration.
 4. Run `Terraria World` with `verify` to check an already running server.
 5. Run `Terraria Backup Setup` with `install` to install backup tools and render the backup service for `TERRARIA_LINUX_USER`. Configure the VM-local token, then use `enable` to start scheduled backups. The same workflow offers `disable`, `backup-now`, and `status`; see `docs/backup-restore.md`.
+
+`Terraria Server Control → start` updates DuckDNS after the VM starts; `stop` clears its records after the VM stops. `Terraria Domain` offers manual `sync` and `clear`. `sync` requires a running VM and reads its public IPv4 address. DNS supplies a hostname, not a proxy; players connect to `jrw-terraria.duckdns.org:7777`. DNS propagation may take time.
 
 The WIF provider variable must use the full provider resource name:
 
@@ -61,7 +63,7 @@ GitHub repository
 
 | Secret | Required now? | Purpose |
 | --- | --- | --- |
-| `DUCKDNS_TOKEN` | Optional | Authenticates DuckDNS updates. |
+| `DUCKDNS_TOKEN` | For DuckDNS | Authenticates DuckDNS updates. Store as repository secret, never as variable or committed file. |
 | `TERRARIA_PASSWORD` | Optional / future | Password passed into Terraria server configuration if password protection is enabled. |
 
 The Terraria world backup token is **not** a GitHub Actions secret in the current design. It is a VM-local secret documented below.

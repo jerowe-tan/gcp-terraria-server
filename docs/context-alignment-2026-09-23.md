@@ -45,11 +45,12 @@ TERRARIA_VERSION=1458
 TERRARIA_INSTALL_DIR=/opt/terraria
 TERRARIA_LINUX_USER=jrw
 TERRARIA_PORT=7777
+DUCKDNS_URL=jrw-terraria.duckdns.org
 ```
 
-The five `GCP_*`/`VM_NAME` values drive all workflows. `TERRARIA_VERSION` is used by server installation; install directory, Linux user, and port are used by installation and world setup. Backup setup reads `TERRARIA_LINUX_USER` to render systemd `User=` and `Group=`. `DUCKDNS_SUBDOMAIN` is documented as optional future configuration; current workflows do not consume it.
+The five `GCP_*`/`VM_NAME` values drive all workflows. `TERRARIA_VERSION` is used by server installation; install directory, Linux user, and port are used by installation and world setup. Backup setup reads `TERRARIA_LINUX_USER` to render systemd `User=` and `Group=`. `DUCKDNS_URL` names the DuckDNS hostname; its actual GitHub variable value was not verified here.
 
-GitHub **repository secret**: `TERRARIA_PASSWORD` is optional and read only during `Terraria World → create-world`. `DUCKDNS_TOKEN` is documented as optional future configuration and is not consumed by current workflows. Do not put backup token or Google service-account JSON key into GitHub Secrets.
+GitHub **repository secrets**: `TERRARIA_PASSWORD` is optional and read only during `Terraria World → create-world`. `DUCKDNS_TOKEN` is required for DuckDNS updates and must remain secret. Do not put backup token or Google service-account JSON key into GitHub Secrets.
 
 `Terraria World → create-world` takes run inputs `world_name`, `world_size`, `difficulty`, `max_players`, and optional `seed`. These are not repository variables. The backup workflow takes `action` (`install`, `enable`, `disable`, `backup-now`, `status`); world workflow takes `action` (`create-world`, `verify`); control takes `action` (`status`, `start`, `stop`).
 
@@ -116,11 +117,14 @@ Intended remote path: GitHub Actions → GitHub OIDC → Google WIF → GitHub c
 | Workflow | File | Manual actions |
 | --- | --- | --- |
 | Terraria Server Control | `.github/workflows/terraria-server-control.yml` | `status`, `start`, `stop` |
+| Terraria Domain | `.github/workflows/terraria-domain.yml` | `sync`, `clear` |
 | Terraria Server Setup | `.github/workflows/terraria-server-setup.yml` | Install Terraria and systemd service only |
 | Terraria World | `.github/workflows/terraria-world.yml` | `create-world`, `verify` |
 | Terraria Backup Setup | `.github/workflows/terraria-backup-setup.yml` | `install`, `enable`, `disable`, `backup-now`, `status` |
 
 Setup, world, and backup setup use GitHub WIF, check that VM is running, test IAP/OS Login and passwordless `sudo`, then execute repository scripts on the VM. They read configuration from GitHub repository variables. World creation refuses to replace an existing world or server config. `TERRARIA_PASSWORD` is an optional GitHub secret used for world configuration; world settings are manual workflow inputs.
+
+DuckDNS is dynamic DNS, not a proxy. `Terraria Domain → sync` reads running VM public IPv4 from GCP and points `jrw-terraria.duckdns.org` at it. `clear` removes DuckDNS IP records. Server Control also syncs after `start` and clears after `stop` when `DUCKDNS_URL` and `DUCKDNS_TOKEN` are configured. Players use `jrw-terraria.duckdns.org:7777`; game firewall and server still need to be working.
 
 Backup setup reads `TERRARIA_LINUX_USER` and renders `systemd/terraria-world-backup.service` with matching `User=` and `Group=` values. For current configuration, both become `jrw`. `install` installs scripts and timer but does **not** create `/etc/terraria-backup.env` or enable the timer. Configure VM-local token and real world path, then run `enable`; it runs an immediate backup first and enables the 10-minute timer only after success. `disable` stops scheduled backups without deleting existing Release assets. `docs/backup-restore.md` has the steps.
 
@@ -137,6 +141,7 @@ terraria-server/
 ├── .github/
 │   └── workflows/
 │       ├── terraria-backup-setup.yml
+│       ├── terraria-domain.yml
 │       ├── terraria-server-control.yml
 │       ├── terraria-server-setup.yml
 │       └── terraria-world.yml
@@ -151,6 +156,7 @@ terraria-server/
 │   ├── install-backup.sh
 │   ├── install-terraria.sh
 │   ├── restore-world-from-github.sh
+│   ├── update-duckdns.sh
 │   └── verify-terraria.sh
 ├── systemd/
 │   ├── terraria-world-backup.service
@@ -174,6 +180,6 @@ terraria-server/
 
 ## Current handoff state
 
-At the latest local check, branch `main` matched `origin/main` at commit `edfd1f6` (`feat: update workflow`). Only untracked file was the exported chat Markdown. Workflow YAML and Bash syntax were checked locally during implementation; the new setup, world, and backup workflows have **not** been confirmed by a live VM run in this conversation.
+At an earlier local check, branch `main` matched `origin/main` at commit `edfd1f6` (`feat: update workflow`). Later DuckDNS workflow and script edits are local and have not been verified on a live VM. Workflow YAML and Bash syntax were checked locally during implementation; the new setup, world, backup, and domain workflows have **not** been confirmed by a live VM run in this conversation. The exported chat Markdown was removed from the working tree after the earlier check; this document did not remove it.
 
 Useful references: `docs/environment-config.md`, `docs/backup-restore.md`, `docs/terraria-installation.md`, and exported chat `ChatGPT-Terraria Server MCP Visibility-20260923-1705.md`. The export links to screenshots, but screenshot image contents are not embedded in the Markdown.

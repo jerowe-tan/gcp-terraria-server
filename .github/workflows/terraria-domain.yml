@@ -1,0 +1,80 @@
+name: Terraria Domain
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Domain action
+        required: true
+        type: choice
+        options: [sync, clear]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraria-server-control
+  cancel-in-progress: false
+
+jobs:
+  domain:
+    name: ${{ inputs.action }} Terraria domain
+    runs-on: ubuntu-latest
+
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      VM_NAME: ${{ vars.VM_NAME }}
+      GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      DUCKDNS_URL: ${{ vars.DUCKDNS_URL }}
+      DUCKDNS_TOKEN: ${{ secrets.DUCKDNS_TOKEN }}
+      TERRARIA_PORT: ${{ vars.TERRARIA_PORT }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate domain configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$DUCKDNS_URL" ]] || { echo "::error::Set GitHub repository variable DUCKDNS_URL to jrw-terraria.duckdns.org."; exit 1; }
+          [[ -n "$DUCKDNS_TOKEN" ]] || { echo "::error::Set GitHub repository secret DUCKDNS_TOKEN."; exit 1; }
+
+      - name: Authenticate to Google Cloud
+        if: inputs.action == 'sync'
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        if: inputs.action == 'sync'
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Point domain to running VM
+        if: inputs.action == 'sync'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in GCP_PROJECT_ID GCP_ZONE VM_NAME; do
+            [[ -n "${!name:-}" ]] || { echo "::error::Missing GitHub repository variable: $name"; exit 1; }
+          done
+          STATUS="$(gcloud compute instances describe "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(status)')"
+          [[ "$STATUS" == "RUNNING" ]] || { echo "::error::VM is $STATUS. Start it with Terraria Server Control first."; exit 1; }
+          PUBLIC_IP="$(gcloud compute instances describe "$VM_NAME" --project="$GCP_PROJECT_ID" --zone="$GCP_ZONE" --format='value(networkInterfaces[0].accessConfigs[0].natIP)')"
+          [[ -n "$PUBLIC_IP" ]] || { echo "::error::VM has no public IPv4 address."; exit 1; }
+          bash scripts/update-duckdns.sh sync "$PUBLIC_IP"
+          echo "Terraria endpoint: ${DUCKDNS_URL#https://}:${TERRARIA_PORT:-7777}"
+
+      - name: Clear domain records
+        if: inputs.action == 'clear'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/update-duckdns.sh clear
